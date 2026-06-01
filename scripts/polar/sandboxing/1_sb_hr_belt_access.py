@@ -8,7 +8,7 @@ from bleak import BleakClient, BleakScanner
 # HEART_RATE_SERVICE_UUID = "0000180d-0000-1000-8000-00805f9b34fb"
 
 # Polar 10 - one of them
-DEVICE_ADDRESS = "A0:9E:1A:E6:B0:5E"
+DEVICE_ADDRESS = "A0:9E:1A:21:92:2C"
 HEART_RATE_SERVICE_UUID =  "0000180d-0000-1000-8000-00805f9b34fb"
 
 async def main() -> None:

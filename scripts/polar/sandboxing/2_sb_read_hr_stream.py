@@ -4,7 +4,7 @@ import pandas as pd
 import time
 
 # Polar H10 device identifier on macOS (CoreBluetooth UUID)
-DEVICE_ADDRESS = "FFDB0E1C-0262-9016-D154-4562DABCBE43"
+DEVICE_ADDRESS = "A0:9E:1A:21:92:2C"
 HR_CHAR = "00002a37-0000-1000-8000-00805f9b34fb"
 STREAM_SECONDS = 60
 

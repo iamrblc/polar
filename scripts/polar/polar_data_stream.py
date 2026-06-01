@@ -54,7 +54,7 @@ accessed directly, you get the data from PMD_DATA service by sending instruction
 to the control service (PMD_CONTROL). 
 '''
 
-DEVICE_ADDRESS = "A0:9E:1A:E6:B0:5E"  # Access on Linux
+DEVICE_ADDRESS = "A0:9E:1A:21:92:2C"  # Access on Linux
 #DEVICE_ADDRESS = "FFDB0E1C-0262-9016-D154-4562DABCBE43" # Access on Mac
 
 PMD_CONTROL = "fb005c81-02e7-f387-1cad-8acd2d8df0c8"
@@ -238,7 +238,9 @@ async def main():
 			print("Connected")
 
 			await client.start_notify(PMD_CONTROL, handle_pmd_control)
+			print("First await")
 			await client.start_notify(PMD_DATA, handle_pmd_data)
+			print("Second await")
 
 			try:
 				print("Resetting previous ACC/ECG streams (if any)...")
