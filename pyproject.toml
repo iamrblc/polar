@@ -13,4 +13,5 @@ dependencies = [
     "plotly>=6.7.0",
     "polar-python>=1.1.1",
     "polar-sdk>=0.31.5",
+    "pyyaml>=6.0.3",
 ]
