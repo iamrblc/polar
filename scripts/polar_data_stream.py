@@ -22,10 +22,16 @@ wall time (s)   = Posix time (seconds from 1970-01-01). From the computer runnin
 ###################
 
 # Generic stuff
-import csv					
-import time						
+import yaml					# To access config
+from pathlib import Path	# To handle paths
+import platform				# To assess OS
+import csv					# To create csv output				
+import time					# Time is money. 
 
-# Task specific stuff
+# Communication with the device
+from bleak import BleakClient # For bluetooth connection
+import asyncio	
+
 '''
 BleakClient manages bluetooth connection and data transfer.
 There was a recommendation for using asyncio for concurrent codes
@@ -37,9 +43,6 @@ so it can do something else. You basically use it like this:
 - when the pause is over, the event loop hands control back to your task.
 - rinse and repeat.
 '''
-
-import asyncio   				
-from bleak import BleakClient  
 
 ##########
 # SETUPS #
@@ -54,8 +57,10 @@ accessed directly, you get the data from PMD_DATA service by sending instruction
 to the control service (PMD_CONTROL). 
 '''
 
-DEVICE_ADDRESS = "A0:9E:1A:21:92:2C"  # Access on Linux
-#DEVICE_ADDRESS = "FFDB0E1C-0262-9016-D154-4562DABCBE43" # Access on Mac
+
+
+BELT = "A0:9E:1A:21:92:2C"  # Access on Linux
+#BELT = "FFDB0E1C-0262-9016-D154-4562DABCBE43" # Access on Mac
 
 PMD_CONTROL = "fb005c81-02e7-f387-1cad-8acd2d8df0c8"
 PMD_DATA = "fb005c82-02e7-f387-1cad-8acd2d8df0c8"
@@ -234,7 +239,7 @@ async def main():
 					print(f"ECG t={t_sample:.6f}  t_wall={t_wall:.3f}  ts_ns={ts_ns}  ecg={ecg:6d}")
 				ecg_csv_file.flush()
 
-		async with BleakClient(DEVICE_ADDRESS) as client:
+		async with BleakClient(BELT) as client:
 			print("Connected")
 
 			await client.start_notify(PMD_CONTROL, handle_pmd_control)
