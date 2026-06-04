@@ -57,6 +57,27 @@ accessed directly, you get the data from PMD_DATA service by sending instruction
 to the control service (PMD_CONTROL). 
 '''
 
+# PATHS
+ROOT = Path(__file__).resolve().parent.parent
+DATA = ROOT / "data"
+CONFIG = ROOT / "scripts" / "config.yaml"
+
+# LOAD CONFIGS
+with open (CONFIG, "r") as f:
+    config = yaml.safe_load(f)
+
+os = platform.system()
+BELT = config["belt"]["uuid"] if os == "Darwin" else config["belt"]["mac_address"]
+belt_human_readable = config["belt"]["name"]
+# HEART RATE SERVICE (HRS)
+HRS = config["belt"]["heart_rate_service"]
+
+# POLAR MEASUREMENT DATA CONTROL (PMDC)
+PMDC = config["belt"]["pmd_control"]
+
+# POLAR MEASUREMENT DATA - DATA (PMDD)
+PMDD = config["belt"]["pmd_data"]
+
 
 
 BELT = "A0:9E:1A:21:92:2C"  # Access on Linux
