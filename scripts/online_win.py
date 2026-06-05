@@ -43,6 +43,9 @@ PMDC = config["belt"]["pmd_control"]
 # POLAR MEASUREMENT DATA - DATA (PMDD)
 PMDD = config["belt"]["pmd_data"]
 
+# BATTERY LEVEL
+BATTERY = config["belt"]["battery"]
+
 # DATA OUTPUT
 ts = dt.now().strftime("%Y%m%d_%H%M")[2:]
 ECG_FILE = DATA / f"ecg_{ts}.csv"
@@ -63,20 +66,26 @@ ECG_START = bytearray([
 	0x01, 0x01, 0x0E, 0x00		# setting: resolution, 1 value, 14 bit (= 0x0E), 0
 ])
 
-ECG_STOP = bytearray(0x03, 0x00) # command: stop, measurement tpye: ECG
+ECG_STOP = bytearray([0x03, 0x00]) # command: stop, measurement tpye: ECG
 
 ##############
 # CONNECTING #
 ##############
-
-print("Connecting. This may take up to 30 seconds")
+3
+print("Connecting. This may take up to 10 seconds")
 
 async def main():
     start = time.perf_counter()
     async with BleakClient(BELT) as client:
         print(f"Connected to {belt_human_readable}.")
+
+        # Check battery level
+        battery_level = await client.read_gatt_char(BATTERY)
+        print(f"Battery level: {battery_level[0]}%.")
+    
+    # Diagnostics only
     end = time.perf_counter() - start
-    print(f"It took {end:.6f} seconds.")
+    print(f"Main function ran for {end:.6f} seconds.")
 
 
 if __name__ == "__main__":
