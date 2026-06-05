@@ -48,16 +48,22 @@ ts = dt.now().strftime("%Y%m%d_%H%M")[2:]
 ECG_FILE = DATA / f"ecg_{ts}.csv"
 print(ECG_FILE)
 
-# ACC AND ECG SAMPLING DELTA TIMES
-DT_ACC = 1 / config["recording"]["acc_freq"]
+# ECG SAMPLING DELTA TIMES
 DT_ECG = 1 / config["recording"]["ecg_freq"]
 
 # DATA STREAM DURATION
 # For now. Later it will be user start/stop
 STREAM_DUR = config["recording"]["stream_duration"]
 
-print(DT_ACC, DT_ECG, STREAM_DUR)
-exit()
+# ECG PMD CONTROL POINTS (MEASUREMENT TYPE: 0x00)
+
+ECG_START = bytearray([
+	0x02, 0x00,					# command: start stream,  measurement type: ECG
+	0x00, 0x01, 0x82, 0x00,		# setting: sample rate, 1 value, 130 Hz (= 0x82), 0 (Little endian!!!)
+	0x01, 0x01, 0x0E, 0x00		# setting: resolution, 1 value, 14 bit (= 0x0E), 0
+])
+
+ECG_STOP = bytearray(0x03, 0x00) # command: stop, measurement tpye: ECG
 
 ##############
 # CONNECTING #
@@ -71,7 +77,6 @@ async def main():
         print(f"Connected to {belt_human_readable}.")
     end = time.perf_counter() - start
     print(f"It took {end:.6f} seconds.")
-
 
 
 if __name__ == "__main__":
