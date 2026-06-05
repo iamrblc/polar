@@ -6,14 +6,11 @@
 import yaml					# To access config
 from pathlib import Path	# To handle paths
 import platform				# To assess OS
-import csv					# To create csv output				
 import time					# Time is money. 
-from datetime import datetime as dt # To make timestamps
 
 # Communication with the device
 from bleak import BleakClient # For bluetooth connection
 import asyncio
-import msvcrt
 
 
 ##########
@@ -47,13 +44,8 @@ PMDD = config["belt"]["pmd_data"]
 # BATTERY LEVEL
 BATTERY = config["belt"]["battery"]
 
-# DATA OUTPUT
-ts = dt.now().strftime("%Y%m%d_%H%M")[2:]
-ECG_FILE = DATA / f"ecg_{ts}.csv"
-print(ECG_FILE)
-
-# ECG SAMPLING DELTA TIMES
-DT_ECG = 1 / config["recording"]["ecg_freq"]
+# DATA STREAM DURATION
+STREAM_DUR = config["recording"]["stream_duration"]
 
 # ECG PMD CONTROL POINTS (MEASUREMENT TYPE: 0x00)
 
@@ -74,19 +66,8 @@ print("Connecting. This may take up to 10 seconds")
 def handle_ecg_packet(sender, data):
     print(f"PMD: {data.hex()}")
 
-async def wait_for_space():
-    while True:
-        key = await asyncio.to_thread(msvcrt.getwch)
-        if key == " ":
-            return
-
 async def main():
     start = time.perf_counter()
-
-    # Create a blank csv file with col headers only.
-    with open(ECG_FILE, "w", newline="") as f:
-        ecg_writer = csv.writer(f)
-        ecg_writer.writerow(["timestamp", "ecg"])
 
     async with BleakClient(BELT) as client:
         print(f"Connected to {belt_human_readable}.")
@@ -99,15 +80,15 @@ async def main():
         print("Start listening to ECG")
         await client.start_notify(PMDD, handle_ecg_packet)
 
-        print("To start streaming, press space. Press space again to stop streaming.")
-
         # Tell H10 to start ECG streaming
-        await wait_for_space()
         print("Start streaming")
         await client.write_gatt_char(PMDC, ECG_START, response=True)
 
+        # Keep stream alive for chosen duration
+        print("Keep stream alive")
+        await asyncio.sleep(STREAM_DUR)
+
         # Stop ECG streaming
-        await wait_for_space()
         print("Stop ECG stream")
         await client.write_gatt_char(PMDC, ECG_STOP, response=True)
 
@@ -123,4 +104,4 @@ async def main():
 
 
 if __name__ == "__main__":
-	asyncio.run(main())
+	asyncio.run(main()) 

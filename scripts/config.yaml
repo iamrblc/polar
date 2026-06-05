@@ -10,4 +10,4 @@ belt:
 recording:
   acc_freq: 200
   ecg_freq: 130
-  stream_duration: 30
+  stream_duration: 5
