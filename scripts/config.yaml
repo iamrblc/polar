@@ -11,3 +11,8 @@ recording:
   acc_freq: 200
   ecg_freq: 130
   stream_duration: 5
+
+experiment:
+  experiment_id:
+  subject_name:
+  subject_species: dog
