@@ -57,14 +57,30 @@ ECG_START = bytearray([
 
 ECG_STOP = bytearray([0x03, 0x00]) # command: stop, measurement tpye: ECG
 
+ecg_data = {}
+
 ##############
 # CONNECTING #
 ##############
-   
+
+
 print("Connecting. This may take up to 10 seconds")
 
 def handle_ecg_packet(sender, data):
-    print(f"PMD: {data.hex()}")
+    pm_type = "ECG" if data[0] == 0 else "ACC"
+    pm_time = int.from_bytes(data[1:9], "little")
+    payload = data[10:]
+
+    samples = []
+
+    print(f"{pm_type} @ {pm_time}")
+    for i in range(0, len(payload), 3):
+        
+        sample = int.from_bytes(payload[i:i+3], "little", signed=True)
+        samples.append(sample)
+        print(sample)
+
+        ecg_data[pm_time] = samples
 
 async def main():
     start = time.perf_counter()
@@ -97,10 +113,14 @@ async def main():
         await client.stop_notify(PMDD)
 
         print("Done.")
+
+        print(ecg_data)
     
     # Diagnostics only
     end = time.perf_counter() - start
+    
     print(f"Main function ran for {end:.6f} seconds.")
+
 
 
 if __name__ == "__main__":
