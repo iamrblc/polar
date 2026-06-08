@@ -9,6 +9,7 @@ dependencies = [
     "ipykernel>=7.2.0",
     "matplotlib>=3.10.9",
     "nbformat>=5.10.4",
+    "neurokit2>=0.2.12",
     "numpy>=2.4.6",
     "pandas>=3.0.3",
     "plotly>=6.7.0",

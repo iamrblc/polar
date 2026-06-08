@@ -10,7 +10,7 @@ belt:
 recording:
   acc_freq: 200
   ecg_freq: 130
-  stream_duration: 600
+  stream_duration: 60
 
 experiment:
   experiment_id:
