@@ -46,14 +46,14 @@ PMDD = config["belt"]["pmd_data"]
 # BATTERY LEVEL
 BATTERY = config["belt"]["battery"]
 
-# DATA STREAM DURATION
-STREAM_DUR = config["recording"]["stream_duration"]
-
 # ECG AND ACC DATAPOINT INTERVALS (DELTA TIME)
 ECG_DT = 1 / config["recording"]["ecg_freq"]
 ACC_DT = 1 / config["recording"]["acc_freq"]
 ECG_DT_MS = ECG_DT * 1000
 ACC_DT_MS = ACC_DT * 1000
+
+# SUBJECT NAME
+SUBJECT_NAME = config["experiment"]["subject_name"]
 
 # ECG PMD CONTROL POINTS (MEASUREMENT TYPE: 0x00)
 
@@ -147,20 +147,20 @@ async def main():
         print("Start listening to ECG")
         await client.start_notify(PMDD, handle_pmd_packet)
 
+        await asyncio.to_thread(input, "Press Enter to start recording: ")
+
         # One shared local timestamp suffix for both output files
         suffix_time = dt.now().strftime("%y%m%d_%H%M")
 
-        # Tell H10 to start ECG streaming
+        # Tell H10 to start streaming
         print("Start streaming")
         await client.write_gatt_char(PMDC, ECG_START, response=True)
         await client.write_gatt_char(PMDC, ACC_START, response=True)
         
-        # Keep stream alive for chosen duration
-        print("Keep stream alive")
-        await asyncio.sleep(STREAM_DUR)
+        await asyncio.to_thread(input, "Press Enter to end recording: ")
 
-        # Stop ECG streaming
-        print("Stop ECG stream")
+        # Stop streaming
+        print("Stop stream")
         await client.write_gatt_char(PMDC, ECG_STOP, response=True)
         await client.write_gatt_char(PMDC, ACC_STOP, response=True)
         
@@ -178,7 +178,7 @@ async def main():
             - ((ecg_packet_sizes - 1 - ecg_df["sample_idx"]) * ECG_DT_MS)
         )
         ecg_df["time_ms"] = ecg_df["sample_time"] - ecg_df["sample_time"].min()
-        ecg_df.to_csv(DATA / f"ecg_{suffix_time}.csv", index=False)
+        ecg_df.to_csv(DATA / f"{SUBJECT_NAME}_ecg_{suffix_time}.csv", index=False)
 
         acc_df = pd.DataFrame(acc_data)
         acc_df["sample_idx"] = acc_df.groupby("packet_id").cumcount()
@@ -188,7 +188,7 @@ async def main():
             - ((acc_packet_sizes - 1 - acc_df["sample_idx"]) * ACC_DT_MS)
         )
         acc_df["time_ms"] = acc_df["sample_time"] - acc_df["sample_time"].min()
-        acc_df.to_csv(DATA / f"acc_{suffix_time}.csv", index=False)
+        acc_df.to_csv(DATA / f"{SUBJECT_NAME}_acc_{suffix_time}.csv", index=False)
     
     # Diagnostics only
     end = time.perf_counter() - start
