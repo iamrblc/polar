@@ -61,6 +61,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._recorder = ECGRecorder(ecg_freq_hz=self._ecg_fs)
         self._acc_recorder = ACCRecorder(acc_freq_hz=self._acc_fs)
         self._is_recording = False
+        self._is_connected = False
         self._current_suffix = ""
 
         self._plot_samples = self._plot_window_sec * self._ecg_fs
@@ -69,7 +70,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self._ring_head = 0
 
         self._build_ui()
-        self._set_idle_state()
+        self._set_disconnected_state()
+        self._runner.submit(self._connect_pipeline())
 
     def _build_ui(self) -> None:
         container = QtWidgets.QWidget(self)
@@ -102,7 +104,11 @@ class MainWindow(QtWidgets.QMainWindow):
         self.curve = self.plot.plot(pen=pg.mkPen(color=(45, 140, 240), width=1.8))
         layout.addWidget(self.plot, stretch=1)
 
-    def _set_idle_state(self) -> None:
+    def _set_disconnected_state(self) -> None:
+        self.start_btn.setEnabled(False)
+        self.stop_btn.setEnabled(False)
+
+    def _set_ready_state(self) -> None:
         self.start_btn.setEnabled(True)
         self.stop_btn.setEnabled(False)
 
@@ -112,6 +118,10 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def _set_status(self, text: str) -> None:
         self.status_lbl.setText(text)
+        if text == "Connected":
+            self._is_connected = True
+            self._set_ready_state()
+            self.status_lbl.setText("Connected (Ready)")
 
     def _set_battery(self, level: int) -> None:
         self.battery_lbl.setText(f"Battery level: {level} %")
@@ -119,10 +129,13 @@ class MainWindow(QtWidgets.QMainWindow):
     def _on_error(self, text: str) -> None:
         self._set_status(f"Error: {text}")
         self._is_recording = False
-        self._set_idle_state()
+        if not self._is_connected:
+            self._set_disconnected_state()
+        else:
+            self._set_ready_state()
 
     def _start_clicked(self) -> None:
-        if self._is_recording:
+        if self._is_recording or not self._is_connected:
             return
 
         self._recorder.clear()
@@ -135,7 +148,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self._is_recording = True
         self._set_recording_state()
-        self._set_status("Connecting...")
+        self._set_status("Recording")
         self._runner.submit(self._start_pipeline())
 
     def _stop_clicked(self) -> None:
@@ -147,20 +160,21 @@ class MainWindow(QtWidgets.QMainWindow):
         self._runner.submit(self._stop_pipeline())
 
     async def _start_pipeline(self):
-        await self._reader.connect()
         await self._reader.start_stream(ecg=True, acc=True)
 
     async def _stop_pipeline(self):
         await self._reader.stop_stream(ecg=True, acc=True)
-        await self._reader.disconnect()
         self._signals.reader_stopped.emit()
+
+    async def _connect_pipeline(self):
+        await self._reader.connect()
 
     def _on_reader_stopped(self) -> None:
         ecg_path = self._recorder.save(DATA_DIR, self._subject_name, self._current_suffix)
         acc_path = self._acc_recorder.save(DATA_DIR, self._subject_name, self._current_suffix)
         self._set_status(f"Saved: {ecg_path.name}, {acc_path.name}")
         self._is_recording = False
-        self._set_idle_state()
+        self._set_ready_state()
 
     def _on_ecg_batch(self, batch: list[ECGSample]) -> None:
         if not self._is_recording:
@@ -197,7 +211,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def closeEvent(self, event):
         if self._is_recording:
             self._runner.submit(self._reader.stop_stream(ecg=True, acc=True))
-            self._runner.submit(self._reader.disconnect())
+        self._runner.submit(self._reader.disconnect())
         self._runner.shutdown()
         event.accept()
 
