@@ -15,5 +15,7 @@ dependencies = [
     "plotly>=6.7.0",
     "polar-python>=1.1.1",
     "polar-sdk>=0.31.5",
+    "pyqtgraph>=0.14.0",
+    "pyside6>=6.11.1",
     "pyyaml>=6.0.3",
 ]
