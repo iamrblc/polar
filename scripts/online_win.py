@@ -76,6 +76,8 @@ ACC_STOP = bytearray([0x03, 0x02]) # command: stop, measurement tpye: ACC
 
 ecg_data = []
 acc_data = []
+ecg_packet_id = 0
+acc_packet_id = 0
 
 ##############
 # CONNECTING #
@@ -85,6 +87,8 @@ acc_data = []
 print("Connecting. This may take up to 10 seconds")
 
 def handle_pmd_packet(sender, data):
+    global ecg_packet_id, acc_packet_id
+
     pm_type = "ECG" if data[0] == 0 else "ACC"
     pm_time = int.from_bytes(data[1:9], "little") / 1_000_000
     payload = data[10:]
@@ -92,10 +96,14 @@ def handle_pmd_packet(sender, data):
     print(f"{pm_type} @ {pm_time}")
 
     if data[0] == 0:  # ECG
+        packet_id = ecg_packet_id
+        ecg_packet_id += 1
+
         for sample_idx, i in enumerate(range(0, len(payload), 3)):
             sample = int.from_bytes(payload[i:i+3], "little", signed=True)
 
             ecg_data.append({
+                "packet_id": packet_id,
                 "device_time": pm_time,
                 "host_time": dt.now().timestamp() * 1000,
                 "ecg": sample
@@ -104,12 +112,16 @@ def handle_pmd_packet(sender, data):
             print(sample)
 
     elif data[0] == 2:  # ACC
+        packet_id = acc_packet_id
+        acc_packet_id += 1
+
         for sample_idx, i in enumerate(range(0, len(payload), 6)):
             x = int.from_bytes(payload[i:i+2], "little", signed=True)
             y = int.from_bytes(payload[i+2:i+4], "little", signed=True)
             z = int.from_bytes(payload[i+4:i+6], "little", signed=True)
 
             acc_data.append({
+                "packet_id": packet_id,
                 "device_time": pm_time,
                 "host_time": dt.now().timestamp() * 1000,
                 "x": x,
