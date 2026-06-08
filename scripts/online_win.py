@@ -6,7 +6,8 @@
 import yaml					# To access config
 from pathlib import Path	# To handle paths
 import platform				# To assess OS
-import time					# Time is money. 
+import time					# Time is money.
+import pandas as pd 
 
 # Communication with the device
 from bleak import BleakClient # For bluetooth connection
@@ -47,6 +48,9 @@ BATTERY = config["belt"]["battery"]
 # DATA STREAM DURATION
 STREAM_DUR = config["recording"]["stream_duration"]
 
+# ECG DATAPOINT INTERVALS (DELTA TIME)
+ECG_DT = 1 / config["recording"]["ecg_freq"]
+
 # ECG PMD CONTROL POINTS (MEASUREMENT TYPE: 0x00)
 
 ECG_START = bytearray([
@@ -57,7 +61,7 @@ ECG_START = bytearray([
 
 ECG_STOP = bytearray([0x03, 0x00]) # command: stop, measurement tpye: ECG
 
-ecg_data = {}
+ecg_data = []
 
 ##############
 # CONNECTING #
@@ -71,16 +75,12 @@ def handle_ecg_packet(sender, data):
     pm_time = int.from_bytes(data[1:9], "little")
     payload = data[10:]
 
-    samples = []
-
     print(f"{pm_type} @ {pm_time}")
-    for i in range(0, len(payload), 3):
-        
+    for sample_idx, i in enumerate(range(0, len(payload), 3)):
         sample = int.from_bytes(payload[i:i+3], "little", signed=True)
-        samples.append(sample)
+        sample_time = pm_time + (sample_idx * ECG_DT)
+        ecg_data.append({"timestamp": sample_time, "ecg": sample})
         print(sample)
-
-        ecg_data[pm_time] = samples
 
 async def main():
     start = time.perf_counter()
@@ -114,7 +114,8 @@ async def main():
 
         print("Done.")
 
-        print(ecg_data)
+        ecg_df = pd.DataFrame(ecg_data)
+        ecg_df.to_csv(DATA / "test.csv", index=False)
     
     # Diagnostics only
     end = time.perf_counter() - start
