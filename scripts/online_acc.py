@@ -49,19 +49,20 @@ BATTERY = config["belt"]["battery"]
 STREAM_DUR = config["recording"]["stream_duration"]
 
 # ECG DATAPOINT INTERVALS (DELTA TIME)
-ECG_DT = 1 / config["recording"]["ecg_freq"]
+ACC_DT = 1 / config["recording"]["acc_freq"]
 
 # ECG PMD CONTROL POINTS (MEASUREMENT TYPE: 0x00)
 
-ECG_START = bytearray([
-	0x02, 0x00,					# command: start stream,  measurement type: ECG
-	0x00, 0x01, 0x82, 0x00,		# setting: sample rate, 1 value, 130 Hz (= 0x82), 0 (Little endian!!!)
-	0x01, 0x01, 0x0E, 0x00		# setting: resolution, 1 value, 14 bit (= 0x0E), 0
+ACC_START = bytearray([
+	0x02, 0x02,					# command: start stream,  measurement type: ACC
+	0x00, 0x01, 0xC8, 0x00,		# setting: sample rate, 1 value, 200 Hz (= 0xC8), 0 (Little endian!!!)
+	0x01, 0x01, 0x10, 0x00,		# setting: resolution, 1 value, 16 bit (= 0x10), 0
+    0x02, 0x01, 0x08, 0x00      # range: 8G
 ])
 
-ECG_STOP = bytearray([0x03, 0x00]) # command: stop, measurement tpye: ECG
+ACC_STOP = bytearray([0x03, 0x02]) # command: stop, measurement tpye: ACC
 
-ecg_data = []
+acc_data = []
 
 ##############
 # CONNECTING #
@@ -70,17 +71,27 @@ ecg_data = []
 
 print("Connecting. This may take up to 10 seconds")
 
-def handle_ecg_packet(sender, data):
+def handle_acc_packet(sender, data):
     pm_type = "ECG" if data[0] == 0 else "ACC"
     pm_time = int.from_bytes(data[1:9], "little") // 1_000_000
     payload = data[10:]
 
     print(f"{pm_type} @ {pm_time}")
-    for sample_idx, i in enumerate(range(0, len(payload), 3)):
-        sample = int.from_bytes(payload[i:i+3], "little", signed=True)
-        sample_time = int(pm_time + (sample_idx * ECG_DT * 1000))
-        ecg_data.append({"timestamp": sample_time, "ecg": sample})
-        print(sample)
+    for sample_idx, i in enumerate(range(0, len(payload), 6)):
+        x = int.from_bytes(payload[i:i+2], "little", signed=True)
+        y = int.from_bytes(payload[i+2:i+4], "little", signed=True)
+        z = int.from_bytes(payload[i+4:i+6], "little", signed=True)
+
+        sample_time = int(pm_time + (sample_idx * ACC_DT * 1000))
+
+        acc_data.append({
+            "timestamp": sample_time,
+            "x": x,
+            "y": y,
+            "z": z,
+        })
+
+        print(x, y, z)
 
 async def main():
     start = time.perf_counter()
@@ -92,21 +103,21 @@ async def main():
         battery_level = await client.read_gatt_char(BATTERY)
         print(f"Battery level: {battery_level[0]}%.")
 
-        # Listen to incoming ECG
-        print("Start listening to ECG")
-        await client.start_notify(PMDD, handle_ecg_packet)
+        # Listen to incoming ACC
+        print("Start listening to ACC")
+        await client.start_notify(PMDD, handle_acc_packet)
 
-        # Tell H10 to start ECG streaming
+        # Tell H10 to start ACC streaming
         print("Start streaming")
-        await client.write_gatt_char(PMDC, ECG_START, response=True)
+        await client.write_gatt_char(PMDC, ACC_START, response=True)
 
         # Keep stream alive for chosen duration
         print("Keep stream alive")
         await asyncio.sleep(STREAM_DUR)
 
-        # Stop ECG streaming
-        print("Stop ECG stream")
-        await client.write_gatt_char(PMDC, ECG_STOP, response=True)
+        # Stop ACC streaming
+        print("Stop ACC stream")
+        await client.write_gatt_char(PMDC, ACC_STOP, response=True)
 
         # Stop listening
         print("stop listening")
@@ -114,8 +125,8 @@ async def main():
 
         print("Done.")
 
-        ecg_df = pd.DataFrame(ecg_data)
-        ecg_df.to_csv(DATA / "test.csv", index=False)
+        acc_df = pd.DataFrame(acc_data)
+        acc_df.to_csv(DATA / "test_acc.csv", index=False)
     
     # Diagnostics only
     end = time.perf_counter() - start
