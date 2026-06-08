@@ -52,6 +52,8 @@ STREAM_DUR = config["recording"]["stream_duration"]
 # ECG AND ACC DATAPOINT INTERVALS (DELTA TIME)
 ECG_DT = 1 / config["recording"]["ecg_freq"]
 ACC_DT = 1 / config["recording"]["acc_freq"]
+ECG_DT_MS = ECG_DT * 1000
+ACC_DT_MS = ACC_DT * 1000
 
 # ECG PMD CONTROL POINTS (MEASUREMENT TYPE: 0x00)
 
@@ -145,6 +147,9 @@ async def main():
         print("Start listening to ECG")
         await client.start_notify(PMDD, handle_pmd_packet)
 
+        # One shared local timestamp suffix for both output files
+        suffix_time = dt.now().strftime("%y%m%d_%H%M")
+
         # Tell H10 to start ECG streaming
         print("Start streaming")
         await client.write_gatt_char(PMDC, ECG_START, response=True)
@@ -166,17 +171,29 @@ async def main():
         print("Done.")
 
         ecg_df = pd.DataFrame(ecg_data)
-        ecg_df.to_csv(DATA / "ecg.csv", index=False)
+        ecg_df["sample_idx"] = ecg_df.groupby("packet_id").cumcount()
+        ecg_packet_sizes = ecg_df.groupby("packet_id")["packet_id"].transform("size")
+        ecg_df["sample_time"] = (
+            ecg_df["device_time"]
+            - ((ecg_packet_sizes - 1 - ecg_df["sample_idx"]) * ECG_DT_MS)
+        )
+        ecg_df["time_ms"] = ecg_df["sample_time"] - ecg_df["sample_time"].min()
+        ecg_df.to_csv(DATA / f"ecg_{suffix_time}.csv", index=False)
 
         acc_df = pd.DataFrame(acc_data)
-        acc_df.to_csv(DATA / "acc.csv", index=False)
+        acc_df["sample_idx"] = acc_df.groupby("packet_id").cumcount()
+        acc_packet_sizes = acc_df.groupby("packet_id")["packet_id"].transform("size")
+        acc_df["sample_time"] = (
+            acc_df["device_time"]
+            - ((acc_packet_sizes - 1 - acc_df["sample_idx"]) * ACC_DT_MS)
+        )
+        acc_df["time_ms"] = acc_df["sample_time"] - acc_df["sample_time"].min()
+        acc_df.to_csv(DATA / f"acc_{suffix_time}.csv", index=False)
     
     # Diagnostics only
     end = time.perf_counter() - start
     
     print(f"Main function ran for {end:.6f} seconds.")
-
-
 
 if __name__ == "__main__":
 	asyncio.run(main()) 
