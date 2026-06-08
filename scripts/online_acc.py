@@ -48,10 +48,10 @@ BATTERY = config["belt"]["battery"]
 # DATA STREAM DURATION
 STREAM_DUR = config["recording"]["stream_duration"]
 
-# ECG DATAPOINT INTERVALS (DELTA TIME)
+# ACC DATAPOINT INTERVALS (DELTA TIME)
 ACC_DT = 1 / config["recording"]["acc_freq"]
 
-# ECG PMD CONTROL POINTS (MEASUREMENT TYPE: 0x00)
+# ACC PMD CONTROL POINTS (MEASUREMENT TYPE: 0x00)
 
 ACC_START = bytearray([
 	0x02, 0x02,					# command: start stream,  measurement type: ACC

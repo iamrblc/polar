@@ -7,6 +7,7 @@ import yaml					# To access config
 from pathlib import Path	# To handle paths
 import platform				# To assess OS
 import time					# Time is money.
+from datetime import datetime as dt
 import pandas as pd 
 
 # Communication with the device
@@ -48,8 +49,9 @@ BATTERY = config["belt"]["battery"]
 # DATA STREAM DURATION
 STREAM_DUR = config["recording"]["stream_duration"]
 
-# ECG DATAPOINT INTERVALS (DELTA TIME)
+# ECG AND ACC DATAPOINT INTERVALS (DELTA TIME)
 ECG_DT = 1 / config["recording"]["ecg_freq"]
+ACC_DT = 1 / config["recording"]["acc_freq"]
 
 # ECG PMD CONTROL POINTS (MEASUREMENT TYPE: 0x00)
 
@@ -61,7 +63,19 @@ ECG_START = bytearray([
 
 ECG_STOP = bytearray([0x03, 0x00]) # command: stop, measurement tpye: ECG
 
+# ACC PMD CONTROL POINTS (MEASUREMENT TYPE: 0x00)
+
+ACC_START = bytearray([
+	0x02, 0x02,					# command: start stream,  measurement type: ACC
+	0x00, 0x01, 0xC8, 0x00,		# setting: sample rate, 1 value, 200 Hz (= 0xC8), 0 (Little endian!!!)
+	0x01, 0x01, 0x10, 0x00,		# setting: resolution, 1 value, 16 bit (= 0x10), 0
+    0x02, 0x01, 0x08, 0x00      # range: 8G
+])
+
+ACC_STOP = bytearray([0x03, 0x02]) # command: stop, measurement tpye: ACC
+
 ecg_data = []
+acc_data = []
 
 ##############
 # CONNECTING #
@@ -70,17 +84,40 @@ ecg_data = []
 
 print("Connecting. This may take up to 10 seconds")
 
-def handle_ecg_packet(sender, data):
+def handle_pmd_packet(sender, data):
     pm_type = "ECG" if data[0] == 0 else "ACC"
-    pm_time = int.from_bytes(data[1:9], "little") // 1_000_000
+    pm_time = int.from_bytes(data[1:9], "little") / 1_000_000
     payload = data[10:]
 
     print(f"{pm_type} @ {pm_time}")
-    for sample_idx, i in enumerate(range(0, len(payload), 3)):
-        sample = int.from_bytes(payload[i:i+3], "little", signed=True)
-        sample_time = int(pm_time + (sample_idx * ECG_DT * 1000))
-        ecg_data.append({"timestamp": sample_time, "ecg": sample})
-        print(sample)
+
+    if data[0] == 0:  # ECG
+        for sample_idx, i in enumerate(range(0, len(payload), 3)):
+            sample = int.from_bytes(payload[i:i+3], "little", signed=True)
+
+            ecg_data.append({
+                "device_time": pm_time,
+                "host_time": dt.now().timestamp() * 1000,
+                "ecg": sample
+            })
+
+            print(sample)
+
+    elif data[0] == 2:  # ACC
+        for sample_idx, i in enumerate(range(0, len(payload), 6)):
+            x = int.from_bytes(payload[i:i+2], "little", signed=True)
+            y = int.from_bytes(payload[i+2:i+4], "little", signed=True)
+            z = int.from_bytes(payload[i+4:i+6], "little", signed=True)
+
+            acc_data.append({
+                "device_time": pm_time,
+                "host_time": dt.now().timestamp() * 1000,
+                "x": x,
+                "y": y,
+                "z": z,
+            })
+
+            print(x, y, z)
 
 async def main():
     start = time.perf_counter()
@@ -94,12 +131,13 @@ async def main():
 
         # Listen to incoming ECG
         print("Start listening to ECG")
-        await client.start_notify(PMDD, handle_ecg_packet)
+        await client.start_notify(PMDD, handle_pmd_packet)
 
         # Tell H10 to start ECG streaming
         print("Start streaming")
         await client.write_gatt_char(PMDC, ECG_START, response=True)
-
+        await client.write_gatt_char(PMDC, ACC_START, response=True)
+        
         # Keep stream alive for chosen duration
         print("Keep stream alive")
         await asyncio.sleep(STREAM_DUR)
@@ -107,7 +145,8 @@ async def main():
         # Stop ECG streaming
         print("Stop ECG stream")
         await client.write_gatt_char(PMDC, ECG_STOP, response=True)
-
+        await client.write_gatt_char(PMDC, ACC_STOP, response=True)
+        
         # Stop listening
         print("stop listening")
         await client.stop_notify(PMDD)
@@ -115,7 +154,10 @@ async def main():
         print("Done.")
 
         ecg_df = pd.DataFrame(ecg_data)
-        ecg_df.to_csv(DATA / "test.csv", index=False)
+        ecg_df.to_csv(DATA / "ecg.csv", index=False)
+
+        acc_df = pd.DataFrame(acc_data)
+        acc_df.to_csv(DATA / "acc.csv", index=False)
     
     # Diagnostics only
     end = time.perf_counter() - start
