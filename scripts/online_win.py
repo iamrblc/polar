@@ -9,6 +9,7 @@ import platform				# To assess OS
 import time					# Time is money.
 from datetime import datetime as dt
 import pandas as pd 
+import numpy as np
 
 # Communication with the device
 from bleak import BleakClient # For bluetooth connection
@@ -170,6 +171,11 @@ async def main():
 
         print("Done.")
 
+        #####################################
+        # CREATING DATAFRAMES AND CSV FILES #
+        #####################################
+
+        # ECG
         ecg_df = pd.DataFrame(ecg_data)
         ecg_df["sample_idx"] = ecg_df.groupby("packet_id").cumcount()
         ecg_packet_sizes = ecg_df.groupby("packet_id")["packet_id"].transform("size")
@@ -180,6 +186,7 @@ async def main():
         ecg_df["time_ms"] = ecg_df["sample_time"] - ecg_df["sample_time"].min()
         ecg_df.to_csv(DATA / f"{SUBJECT_NAME}_ecg_{suffix_time}.csv", index=False)
 
+        # ACC
         acc_df = pd.DataFrame(acc_data)
         acc_df["sample_idx"] = acc_df.groupby("packet_id").cumcount()
         acc_packet_sizes = acc_df.groupby("packet_id")["packet_id"].transform("size")
@@ -189,6 +196,23 @@ async def main():
         )
         acc_df["time_ms"] = acc_df["sample_time"] - acc_df["sample_time"].min()
         acc_df.to_csv(DATA / f"{SUBJECT_NAME}_acc_{suffix_time}.csv", index=False)
+
+        # UNIFIED RECORDING
+        recording = pd.merge_asof(
+            ecg_df,
+            acc_df[["time_ms", "x", "y", "z"]],
+            on="time_ms",
+            direction="nearest"
+        )
+        recording = recording[["time_ms", "ecg", "x", "y", "z"]]
+        
+        # Calculate acceleration magnitude
+        recording["acc_mag"] = np.sqrt(
+            recording["x"]**2 +
+            recording["y"]**2 +
+            recording["z"]**2)
+
+        recording.to_csv(DATA / f"{SUBJECT_NAME}_recording_{suffix_time}.csv", index=False)
     
     # Diagnostics only
     end = time.perf_counter() - start
