@@ -1,3 +1,9 @@
+'''
+This script establishes connection with the H10 via Bluetooth
+and handles the Polar Measurement protocol. 
+'''
+
+
 from __future__ import annotations
 
 import asyncio
@@ -7,9 +13,13 @@ from datetime import datetime as dt
 from pathlib import Path
 from typing import Callable
 
-import yaml
+import yaml                            
 from bleak import BleakClient
 
+'''
+SAMPLING
+slots = True -> Prevents per-instance __dict__ creation. 
+'''
 
 @dataclass(slots=True)
 class ECGSample:
@@ -28,57 +38,54 @@ class ACCSample:
     y: int
     z: int
 
+'''
+READER
+This handles packets coming from the H10.
+Binary control points are based on Polar's manual, use cases
+and some trial and error. ¯\_(ツ)_/¯  
+'''
 
 class PolarReader:
-    """Read ECG/ACC packets from Polar H10 and emit parsed sample batches."""
 
-    ECG_START = bytearray(
-        [
-            0x02,
-            0x00,
-            0x00,
-            0x01,
-            0x82,
-            0x00,
-            0x01,
-            0x01,
-            0x0E,
-            0x00,
-        ]
-    )
-    ECG_STOP = bytearray([0x03, 0x00])
+    ECG_START = bytearray([
+	    0x02, 0x00,					# command: start stream,  measurement type: ECG
+	    0x00, 0x01, 0x82, 0x00,		# setting: sample rate, 1 value, 130 Hz (= 0x82), 0 (Little endian!!!)
+	    0x01, 0x01, 0x0E, 0x00		# setting: resolution, 1 value, 14 bit (= 0x0E), 0
+    ])
 
-    ACC_START = bytearray(
-        [
-            0x02,
-            0x02,
-            0x00,
-            0x01,
-            0xC8,
-            0x00,
-            0x01,
-            0x01,
-            0x10,
-            0x00,
-            0x02,
-            0x01,
-            0x08,
-            0x00,
-        ]
-    )
-    ACC_STOP = bytearray([0x03, 0x02])
+    ECG_STOP = bytearray([0x03, 0x00]) # command: stop, measurement tpye: ECG
+
+    ACC_START = bytearray([
+	    0x02, 0x02,					# command: start stream,  measurement type: ACC
+	    0x00, 0x01, 0xC8, 0x00,		# setting: sample rate, 1 value, 200 Hz (= 0xC8), 0 (Little endian!!!)
+	    0x01, 0x01, 0x10, 0x00,		# setting: resolution, 1 value, 16 bit (= 0x10), 0
+        0x02, 0x01, 0x08, 0x00      # range: 8G
+    ])
+
+    ACC_STOP = bytearray([0x03, 0x02]) # command: stop, measurement tpye: ACC
+
+    ##########
+    # SETUPS #
+    ##########
 
     def __init__(self, config_path: Path):
         with open(config_path, "r", encoding="utf-8") as handle:
             config = yaml.safe_load(handle)
 
+
+        # BELT
+        # On Mac it's identified using UUID, on Win and Linux with MAC address
         self._belt_name = config["belt"]["name"]
         os_name = platform.system()
         self._belt_address = (
             config["belt"]["uuid"] if os_name == "Darwin" else config["belt"]["mac_address"]
         )
+
+        # POLAR MEASUREMENT DATA CONTROL
         self._pmd_control = config["belt"]["pmd_control"]
         self._pmd_data = config["belt"]["pmd_data"]
+
+        # BATTERY STATUS
         self._battery = config["belt"]["battery"]
 
         self._client: BleakClient | None = None
@@ -91,6 +98,11 @@ class PolarReader:
         self.on_battery: Callable[[int], None] = lambda _level: None
         self.on_ecg_batch: Callable[[list[ECGSample]], None] = lambda _batch: None
         self.on_acc_batch: Callable[[list[ACCSample]], None] = lambda _batch: None
+
+
+    ################################
+    # CONNECTING AND DISCONNECTING #
+    ################################
 
     async def connect(self) -> None:
         if self._client and self._client.is_connected:
@@ -121,6 +133,10 @@ class PolarReader:
         finally:
             self._client = None
             self._is_streaming = False
+
+    ##################
+    # DATA STREAMING #
+    ##################
 
     async def start_stream(self, ecg: bool = True, acc: bool = False) -> None:
         client = self._client
@@ -161,25 +177,33 @@ class PolarReader:
         except Exception as exc:
             self.on_error(f"Stop stream failed: {exc}")
 
+    ###################
+    # PACKET HANDLING #
+    ###################        
+
     def _handle_pmd_packet(self, _sender: int, data: bytearray) -> None:
         if not data or len(data) < 10:
             return
 
         measurement_type = data[0]
-        device_time_ms = int.from_bytes(data[1:9], "little") / 1_000_000
-        payload = data[10:]
-        host_time_ms = dt.now().timestamp() * 1000
+        device_time_ms = int.from_bytes(data[1:9], "little") / 1_000_000    # device time is nanoseconds elapsed since 2000-01-01 (?)
+        payload = data[10:]                                                 # first 10 bytes are header
+        host_time_ms = dt.now().timestamp() * 1000                          # unix time (seconds)
 
-        if measurement_type == 0x00:
+        if measurement_type == 0x00:                                        # ECG
             batch = self._parse_ecg(payload, device_time_ms, host_time_ms)
             if batch:
                 self.on_ecg_batch(batch)
             return
 
-        if measurement_type == 0x02:
+        if measurement_type == 0x02:                                        # ACC
             batch = self._parse_acc(payload, device_time_ms, host_time_ms)
             if batch:
                 self.on_acc_batch(batch)
+    
+    #######################
+    # PARSING PACKET DATA #            
+    #######################
 
     def _parse_ecg(
         self, payload: bytearray, device_time_ms: float, host_time_ms: float

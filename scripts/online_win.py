@@ -34,7 +34,7 @@ os = platform.system()
 BELT = config["belt"]["uuid"] if os == "Darwin" else config["belt"]["mac_address"]
 belt_human_readable = config["belt"]["name"]    # What's printed on the device.
 
-# HEART RATE SERVICE (HRS)
+# HEART RATE SERVICE (HRS) - not needed actually 
 HRS = config["belt"]["heart_rate_service"]
 
 # POLAR MEASUREMENT DATA CONTROL (PMDC)
