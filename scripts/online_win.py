@@ -10,6 +10,7 @@ import time					# Time is money.
 from datetime import datetime as dt
 import pandas as pd 
 import numpy as np
+import neurokit2 as nk
 
 # Communication with the device
 from bleak import BleakClient # For bluetooth connection
@@ -184,7 +185,18 @@ async def main():
             - ((ecg_packet_sizes - 1 - ecg_df["sample_idx"]) * ECG_DT_MS)
         )
         ecg_df["time_ms"] = ecg_df["sample_time"] - ecg_df["sample_time"].min()
+
+        # Add R-peak detection
+        _, info = nk.ecg_peaks(
+            ecg_df["ecg"],
+            sampling_rate = 130
+        )
+        rpeaks = info["ECG_R_Peaks"]
+        ecg_df["r_peak"] = 0
+        ecg_df.loc[rpeaks, "r_peak"] = 1
+
         ecg_df.to_csv(DATA / f"{SUBJECT_NAME}_ecg_{suffix_time}.csv", index=False)
+        
 
         # ACC
         acc_df = pd.DataFrame(acc_data)
@@ -195,22 +207,23 @@ async def main():
             - ((acc_packet_sizes - 1 - acc_df["sample_idx"]) * ACC_DT_MS)
         )
         acc_df["time_ms"] = acc_df["sample_time"] - acc_df["sample_time"].min()
+        
+         # Calculate acceleration magnitude
+        acc_df["acc_mag"] = np.sqrt(
+            acc_df["x"]**2 +
+            acc_df["y"]**2 +
+            acc_df["z"]**2)
+        
         acc_df.to_csv(DATA / f"{SUBJECT_NAME}_acc_{suffix_time}.csv", index=False)
 
         # UNIFIED RECORDING
         recording = pd.merge_asof(
             ecg_df,
-            acc_df[["time_ms", "x", "y", "z"]],
+            acc_df[["time_ms", "x", "y", "z", "acc_mag"]],
             on="time_ms",
             direction="nearest"
         )
-        recording = recording[["time_ms", "ecg", "x", "y", "z"]]
-        
-        # Calculate acceleration magnitude
-        recording["acc_mag"] = np.sqrt(
-            recording["x"]**2 +
-            recording["y"]**2 +
-            recording["z"]**2)
+        recording = recording[["time_ms", "ecg", "r_peak", "acc_mag"]]
 
         recording.to_csv(DATA / f"{SUBJECT_NAME}_recording_{suffix_time}.csv", index=False)
     
