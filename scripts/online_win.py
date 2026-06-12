@@ -135,6 +135,26 @@ def handle_pmd_packet(sender, data):
 
             print(x, y, z)
 
+async def safety_reset(client):
+    try:
+        await client.start_notify(PMDD, handle_pmd_packet)
+    except Exception:
+        pass
+
+    for cmd in (ECG_STOP, ACC_STOP):
+        try:
+            await client.write_gatt_char(PMDC, cmd, response=True)
+        except Exception:
+            pass
+
+    try:
+        await client.stop_notify(PMDD)
+    except Exception:
+        pass
+
+    await client.disconnect()
+    await asyncio.sleep(2)
+
 async def main():
     start = time.perf_counter()
 
