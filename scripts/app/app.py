@@ -8,7 +8,7 @@ import pyqtgraph as pg
 from PySide6 import QtCore, QtWidgets
 
 from polar_reader import ACCSample, AsyncRunner, ECGSample, PolarReader
-from recorder import ACCRecorder, ECGRecorder, session_suffix
+from recorder import ACCRecorder, ECGRecorder, save_recording, session_suffix
 from constants import BELTS, POLAR
 
 
@@ -199,9 +199,18 @@ class MainWindow(QtWidgets.QMainWindow):
         await self._reader.connect()
 
     def _on_reader_stopped(self) -> None:
-        ecg_path = self._recorder.save(DATA_DIR, self._subject_name, self._current_suffix)
-        acc_path = self._acc_recorder.save(DATA_DIR, self._subject_name, self._current_suffix)
-        self._set_status(f"Saved: {ecg_path.name}, {acc_path.name}")
+        ecg_path, acc_path, recording_path = save_recording(
+        DATA_DIR,
+        self._subject_name,
+        self._current_suffix,
+        self._recorder,
+        self._acc_recorder,
+        )
+
+        self._set_status(
+            f"Saved: {ecg_path.name}, {acc_path.name}, {recording_path.name}"
+            )
+
         self._is_recording = False
         self._set_ready_state()
 
