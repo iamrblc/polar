@@ -10,10 +10,8 @@ import asyncio
 import platform
 from dataclasses import dataclass
 from datetime import datetime as dt
-from pathlib import Path
 from typing import Callable
-
-import yaml                            
+                        
 from bleak import BleakClient
 
 '''
@@ -68,25 +66,21 @@ class PolarReader:
     # SETUPS #
     ##########
 
-    def __init__(self, config_path: Path):
-        with open(config_path, "r", encoding="utf-8") as handle:
-            config = yaml.safe_load(handle)
-
-
+    def __init__(self, belt: dict, constants: dict):
+       
         # BELT
         # On Mac it's identified using UUID, on Win and Linux with MAC address
-        self._belt_name = config["belt"]["name"]
+        self._belt_name = belt["name"]
+
         os_name = platform.system()
-        self._belt_address = (
-            config["belt"]["uuid"] if os_name == "Darwin" else config["belt"]["mac_address"]
-        )
+        self._belt_address = belt["uuid"] if os_name == "Darwin" else belt["mac_address"]
 
         # POLAR MEASUREMENT DATA CONTROL
-        self._pmd_control = config["belt"]["pmd_control"]
-        self._pmd_data = config["belt"]["pmd_data"]
+        self._pmd_control = constants["PMDC"]
+        self._pmd_data = constants["PMDD"]
 
         # BATTERY STATUS
-        self._battery = config["belt"]["battery"]
+        self._battery = constants["BATTERY"]
 
         self._client: BleakClient | None = None
         self._is_streaming = False

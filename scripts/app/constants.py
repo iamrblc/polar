@@ -1,4 +1,5 @@
 POLAR = {
+    "HRS": "0000180d-0000-1000-8000-00805f9b34fb",
     "PMDC": "fb005c81-02e7-f387-1cad-8acd2d8df0c8",
     "PMDD": "fb005c82-02e7-f387-1cad-8acd2d8df0c8",
     "BATTERY": "00002a19-0000-1000-8000-00805f9b34fb",

@@ -22,37 +22,13 @@ import asyncio
 ##########
 
 # PATHS
-ROOT = Path(__file__).resolve().parent.parent
-DATA = ROOT / "data"
-CONFIG = ROOT / "scripts" / "config.yaml"
+ROOT = Path(__file__).resolve().parent
+DATA = ROOT / "recordings"
 
-#LOAD CONFIGS
-with open (CONFIG, "r") as f:
-    config = yaml.safe_load(f)
-
-# BELT
 # On Mac it's identified using UUID, on Win and Linux with MAC address
 os = platform.system()          
 BELT = config["belt"]["uuid"] if os == "Darwin" else config["belt"]["mac_address"]
 belt_human_readable = config["belt"]["name"]    # What's printed on the device.
-
-# HEART RATE SERVICE (HRS) - not needed actually 
-HRS = config["belt"]["heart_rate_service"]
-
-# POLAR MEASUREMENT DATA CONTROL (PMDC)
-PMDC = config["belt"]["pmd_control"]
-
-# POLAR MEASUREMENT DATA - DATA (PMDD)
-PMDD = config["belt"]["pmd_data"]
-
-# BATTERY LEVEL
-BATTERY = config["belt"]["battery"]
-
-# ECG AND ACC DATAPOINT INTERVALS (DELTA TIME)
-ECG_DT = 1 / config["recording"]["ecg_freq"]
-ACC_DT = 1 / config["recording"]["acc_freq"]
-ECG_DT_MS = ECG_DT * 1000
-ACC_DT_MS = ACC_DT * 1000
 
 # SUBJECT NAME
 SUBJECT_NAME = config["experiment"]["subject_name"]

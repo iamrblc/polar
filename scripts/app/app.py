@@ -5,16 +5,15 @@ from pathlib import Path
 
 import numpy as np
 import pyqtgraph as pg
-import yaml
 from PySide6 import QtCore, QtWidgets
 
 from polar_reader import ACCSample, AsyncRunner, ECGSample, PolarReader
 from recorder import ACCRecorder, ECGRecorder, session_suffix
+from constants import BELTS, POLAR
 
 
 ROOT = Path(__file__).resolve().parent
-CONFIG_PATH = ROOT / "scripts" / "config.yaml"
-DATA_DIR = ROOT / "data"
+DATA = ROOT / "recordings"
 
 
 class UiSignals(QtCore.QObject):
@@ -31,13 +30,11 @@ class MainWindow(QtWidgets.QMainWindow):
         super().__init__()
         self.setWindowTitle("Polar ECG Recorder")
         self.resize(1000, 620)
+        
+        self._subject_name = ""
+        self._ecg_fs = POLAR["ECG_FREQ"]
+        self._acc_fs = POLAR["ACC_FREQ"]
 
-        with open(CONFIG_PATH, "r", encoding="utf-8") as handle:
-            config = yaml.safe_load(handle)
-
-        self._subject_name = config["experiment"]["subject_name"] or "test"
-        self._ecg_fs = int(config["recording"]["ecg_freq"])
-        self._acc_fs = int(config["recording"]["acc_freq"])
         self._plot_window_sec = 5
 
         self._signals = UiSignals()
@@ -51,12 +48,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._runner = AsyncRunner()
         self._runner.start()
 
-        self._reader = PolarReader(CONFIG_PATH)
-        self._reader.on_status = self._signals.status.emit
-        self._reader.on_error = self._signals.error.emit
-        self._reader.on_battery = self._signals.battery.emit
-        self._reader.on_ecg_batch = self._signals.ecg_batch.emit
-        self._reader.on_acc_batch = self._signals.acc_batch.emit
+        self._reader = None
 
         self._recorder = ECGRecorder(ecg_freq_hz=self._ecg_fs)
         self._acc_recorder = ACCRecorder(acc_freq_hz=self._acc_fs)
@@ -71,7 +63,6 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self._build_ui()
         self._set_disconnected_state()
-        self._runner.submit(self._connect_pipeline())
 
     def _build_ui(self) -> None:
         container = QtWidgets.QWidget(self)
@@ -79,6 +70,21 @@ class MainWindow(QtWidgets.QMainWindow):
         layout = QtWidgets.QVBoxLayout(container)
 
         controls = QtWidgets.QHBoxLayout()
+        self.belt_combo = QtWidgets.QComboBox()
+
+        for belt_id, belt in BELTS.items():
+            self.belt_combo.addItem(belt["name"], belt_id)
+
+        self.subject_edit = QtWidgets.QLineEdit()
+        self.subject_edit.setMinimumWidth(200)
+        self.subject_edit.setPlaceholderText("subject_name")
+
+        self.connect_btn = QtWidgets.QPushButton("Connect")
+
+        controls.addWidget(self.belt_combo)
+        controls.addWidget(self.subject_edit)
+        controls.addWidget(self.connect_btn)
+
         self.start_btn = QtWidgets.QPushButton("Start")
         self.stop_btn = QtWidgets.QPushButton("Stop")
         self.status_lbl = QtWidgets.QLabel("Disconnected")
@@ -88,6 +94,9 @@ class MainWindow(QtWidgets.QMainWindow):
 
         self.start_btn.clicked.connect(self._start_clicked)
         self.stop_btn.clicked.connect(self._stop_clicked)
+
+        self.connect_btn.clicked.connect(self._connect_clicked)
+
 
         controls.addWidget(self.start_btn)
         controls.addWidget(self.stop_btn)
@@ -134,6 +143,22 @@ class MainWindow(QtWidgets.QMainWindow):
         else:
             self._set_ready_state()
 
+    def _connect_clicked(self) -> None:
+        belt_id = self.belt_combo.currentData()
+
+        self._subject_name = self.subject_edit.text().strip() or "test"
+
+        belt = BELTS[belt_id]
+        self._reader = PolarReader(belt, POLAR)
+
+        self._reader.on_status = self._signals.status.emit
+        self._reader.on_error = self._signals.error.emit
+        self._reader.on_battery = self._signals.battery.emit
+        self._reader.on_ecg_batch = self._signals.ecg_batch.emit
+        self._reader.on_acc_batch = self._signals.acc_batch.emit
+
+        self._runner.submit(self._connect_pipeline())
+
     def _start_clicked(self) -> None:
         if self._is_recording or not self._is_connected:
             return
@@ -167,6 +192,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self._signals.reader_stopped.emit()
 
     async def _connect_pipeline(self):
+        if self._reader is None:
+            return
         await self._reader.connect()
 
     def _on_reader_stopped(self) -> None:
