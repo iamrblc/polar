@@ -13,7 +13,7 @@ from constants import BELTS, POLAR
 
 
 ROOT = Path(__file__).resolve().parent
-DATA = ROOT / "recordings"
+DATA_DIR = ROOT / "recordings"
 
 
 class UiSignals(QtCore.QObject):
@@ -130,6 +130,8 @@ class MainWindow(QtWidgets.QMainWindow):
         if text == "Connected":
             self._is_connected = True
             self._set_ready_state()
+            self.connect_btn.setEnabled(False)
+            self.connect_btn.setText("Connected")
             self.status_lbl.setText("Connected (Ready)")
 
     def _set_battery(self, level: int) -> None:
