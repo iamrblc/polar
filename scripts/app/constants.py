@@ -18,4 +18,10 @@ BELTS = {
         "uuid": "FFDB0E1C-0262-9016-D154-4562DABCBE43",
         "mac_address": "A0:9E:1A:E6:B0:5E",
     },
+
+    "E0FD8E20": {
+        "name": "Polar H10 E0FD8E20",
+        "uuid": "CFE73EDC-0BC3-3F60-707F-A75CD79B865A",
+        "mac_address": "A0:9E:1A:E6:B0:5E", # This needs to be checked.
+    }
 }
