@@ -8,7 +8,7 @@ import pyqtgraph as pg
 from PySide6 import QtCore, QtWidgets
 
 from polar_reader import ACCSample, AsyncRunner, ECGSample, PolarReader
-from recorder import ACCRecorder, ECGRecorder, save_recording, session_suffix
+from recorder import ACCRecorder, ECGRecorder, initialize_session_files, save_recording, session_suffix
 from constants import BELTS, POLAR
 
 
@@ -168,6 +168,18 @@ class MainWindow(QtWidgets.QMainWindow):
         self._recorder.clear()
         self._acc_recorder.clear()
         self._current_suffix = session_suffix()
+        
+        ecg_path, acc_path, recording_path = initialize_session_files(
+            DATA_DIR,
+            self._subject_name,
+            self._current_suffix,
+            )
+
+        # This might not flash, as it's getting overwritten immediately.
+        self._set_status(
+            f"Session files created: {ecg_path.name}, {acc_path.name}, {recording_path.name}"
+            )
+
         self._ring.fill(0.0)
         self._ring_head = 0
         self._ring_count = 0

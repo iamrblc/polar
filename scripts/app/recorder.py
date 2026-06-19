@@ -151,6 +151,25 @@ def save_dataframe(df: pd.DataFrame, out_path: Path) -> None:
     out_path.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(out_path, index=False)
 
+def initialize_session_files(
+    data_dir: Path,
+    subject_name: str,
+    suffix: str,
+) -> tuple[Path, Path, Path]:
+    data_dir.mkdir(parents=True, exist_ok=True)
+
+    ecg_path = data_dir / f"{subject_name}_ecg_{suffix}.csv"
+    acc_path = data_dir / f"{subject_name}_acc_{suffix}.csv"
+    recording_path = data_dir / f"{subject_name}_recording_{suffix}.csv"
+
+    pd.DataFrame(columns=ECG_COLUMNS).to_csv(ecg_path, index=False)
+    pd.DataFrame(columns=ACC_COLUMNS).to_csv(acc_path, index=False)
+    pd.DataFrame(columns=["time_ms", "ecg", "r_peak", "acc_mag"]).to_csv(
+        recording_path,
+        index=False,
+    )
+
+    return ecg_path, acc_path, recording_path
 
 def save_recording(
     data_dir: Path,
