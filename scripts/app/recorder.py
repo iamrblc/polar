@@ -39,13 +39,19 @@ class ECGRecorder:
         self.ecg_freq_hz = ecg_freq_hz
         self._ecg_dt_ms = 1000.0 / ecg_freq_hz
         self._rows: list[dict] = []
+        self._buffer_rows: list[dict] = []
+        self._first_sample_time_ms: float | None = None
 
     def clear(self) -> None:
         self._rows.clear()
+        self._buffer_rows.clear()
+        self._first_sample_time_ms = None
 
     def ingest(self, batch: list[ECGSample]) -> None:
         for sample in batch:
-            self._rows.append(asdict(sample))
+            row = asdict(sample)
+            self._rows.append(row)
+            self._buffer_rows.append(row)
 
     def to_dataframe(self) -> pd.DataFrame:
         return build_ecg_dataframe(self._rows, self._ecg_dt_ms)
@@ -55,18 +61,38 @@ class ECGRecorder:
         save_dataframe(self.to_dataframe(), out_path)
         return out_path
 
+    def flush_buffer(self, out_path: Path) -> None:
+        if not self._buffer_rows:
+            return
+
+        df = build_ecg_dataframe(self._buffer_rows, self._ecg_dt_ms)
+
+        if self._first_sample_time_ms is None:
+            self._first_sample_time_ms = df["sample_time_ms"].min()
+
+        df["time_ms"] = df["sample_time_ms"] - self._first_sample_time_ms
+
+        df.to_csv(out_path, mode="a", header=False, index=False)
+        self._buffer_rows.clear()
+
 
 class ACCRecorder:
     def __init__(self, acc_freq_hz: int):
         self._acc_dt_ms = 1000.0 / acc_freq_hz
         self._rows: list[dict] = []
+        self._buffer_rows: list[dict] = []
+        self._first_sample_time_ms: float | None = None
 
     def clear(self) -> None:
         self._rows.clear()
+        self._buffer_rows.clear()
+        self._first_sample_time_ms = None
 
     def ingest(self, batch: list[ACCSample]) -> None:
         for sample in batch:
-            self._rows.append(asdict(sample))
+            row = asdict(sample)
+            self._rows.append(row)
+            self._buffer_rows.append(row)
 
     def to_dataframe(self) -> pd.DataFrame:
         return build_acc_dataframe(self._rows, self._acc_dt_ms)
@@ -75,6 +101,20 @@ class ACCRecorder:
         out_path = data_dir / f"{subject_name}_acc_{suffix}.csv"
         save_dataframe(self.to_dataframe(), out_path)
         return out_path
+
+    def flush_buffer(self, out_path: Path) -> None:
+        if not self._buffer_rows:
+            return
+
+        df = build_acc_dataframe(self._buffer_rows, self._acc_dt_ms)
+
+        if self._first_sample_time_ms is None:
+            self._first_sample_time_ms = df["sample_time_ms"].min()
+
+        df["time_ms"] = df["sample_time_ms"] - self._first_sample_time_ms
+
+        df.to_csv(out_path, mode="a", header=False, index=False)
+        self._buffer_rows.clear()
 
 
 def build_ecg_dataframe(rows: list[dict], ecg_dt_ms: float) -> pd.DataFrame:

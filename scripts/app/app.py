@@ -56,6 +56,14 @@ class MainWindow(QtWidgets.QMainWindow):
         self._is_connected = False
         self._current_suffix = ""
 
+        self._ecg_path = None
+        self._acc_path = None
+        self._recording_path = None
+
+        self._flush_timer = QtCore.QTimer(self)
+        self._flush_timer.setInterval(5000)
+        self._flush_timer.timeout.connect(self._flush_recording_buffers)
+
         self._plot_samples = self._plot_window_sec * self._ecg_fs
         self._ring = np.zeros(self._plot_samples, dtype=np.float64)
         self._ring_count = 0
@@ -169,15 +177,15 @@ class MainWindow(QtWidgets.QMainWindow):
         self._acc_recorder.clear()
         self._current_suffix = session_suffix()
         
-        ecg_path, acc_path, recording_path = initialize_session_files(
+        self._ecg_path, self._acc_path, self._recording_path = initialize_session_files(
             DATA_DIR,
             self._subject_name,
             self._current_suffix,
-            )
+        )
 
         # This might not flash, as it's getting overwritten immediately.
         self._set_status(
-            f"Session files created: {ecg_path.name}, {acc_path.name}, {recording_path.name}"
+            f"Session files created: {self._ecg_path.name}, {self._acc_path.name}, {self._recording_path.name}"
             )
 
         self._ring.fill(0.0)
@@ -188,6 +196,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self._is_recording = True
         self._set_recording_state()
         self._set_status("Recording")
+        self._flush_timer.start()
         self._runner.submit(self._start_pipeline())
 
     def _stop_clicked(self) -> None:
@@ -211,17 +220,20 @@ class MainWindow(QtWidgets.QMainWindow):
         await self._reader.connect()
 
     def _on_reader_stopped(self) -> None:
+        self._flush_timer.stop()
+        self._flush_recording_buffers()
+
         ecg_path, acc_path, recording_path = save_recording(
-        DATA_DIR,
-        self._subject_name,
-        self._current_suffix,
-        self._recorder,
-        self._acc_recorder,
+            DATA_DIR,
+            self._subject_name,
+            self._current_suffix,
+            self._recorder,
+            self._acc_recorder,
         )
 
         self._set_status(
             f"Saved: {ecg_path.name}, {acc_path.name}, {recording_path.name}"
-            )
+        )
 
         self._is_recording = False
         self._set_ready_state()
@@ -264,6 +276,16 @@ class MainWindow(QtWidgets.QMainWindow):
         self._runner.submit(self._reader.disconnect())
         self._runner.shutdown()
         event.accept()
+
+    def _flush_recording_buffers(self) -> None:
+        if not self._is_recording:
+            return
+
+        if self._ecg_path is not None:
+            self._recorder.flush_buffer(self._ecg_path)
+
+        if self._acc_path is not None:
+            self._acc_recorder.flush_buffer(self._acc_path)
 
 
 def main() -> int:
