@@ -11,9 +11,32 @@ import pandas as pd
 from polar_reader import ACCSample, ECGSample
 
 
+ECG_COLUMNS = [
+    "packet_id",
+    "device_time_ms",
+    "host_time_ms",
+    "ecg",
+    "sample_idx",
+    "sample_time_ms",
+    "time_ms",
+]
+
+ACC_COLUMNS = [
+    "packet_id",
+    "device_time_ms",
+    "host_time_ms",
+    "x",
+    "y",
+    "z",
+    "sample_idx",
+    "sample_time_ms",
+    "time_ms",
+]
+
+
 class ECGRecorder:
     def __init__(self, ecg_freq_hz: int):
-        self._ecg_freq_hz = ecg_freq_hz
+        self.ecg_freq_hz = ecg_freq_hz
         self._ecg_dt_ms = 1000.0 / ecg_freq_hz
         self._rows: list[dict] = []
 
@@ -25,40 +48,11 @@ class ECGRecorder:
             self._rows.append(asdict(sample))
 
     def to_dataframe(self) -> pd.DataFrame:
-        df = pd.DataFrame(self._rows)
-
-        if df.empty:
-            return pd.DataFrame(
-                columns=[
-                    "packet_id",
-                    "device_time_ms",
-                    "host_time_ms",
-                    "ecg",
-                    "sample_idx",
-                    "sample_time_ms",
-                    "time_ms",
-                ]
-            )
-
-        df["sample_idx"] = df.groupby("packet_id").cumcount()
-        packet_sizes = df.groupby("packet_id")["packet_id"].transform("size")
-
-        df["sample_time_ms"] = (
-            df["device_time_ms"]
-            - ((packet_sizes - 1 - df["sample_idx"]) * self._ecg_dt_ms)
-        )
-
-        df["time_ms"] = df["sample_time_ms"] - df["sample_time_ms"].min()
-
-        return df
+        return build_ecg_dataframe(self._rows, self._ecg_dt_ms)
 
     def save(self, data_dir: Path, subject_name: str, suffix: str) -> Path:
-        data_dir.mkdir(parents=True, exist_ok=True)
         out_path = data_dir / f"{subject_name}_ecg_{suffix}.csv"
-
-        df = self.to_dataframe()
-        df.to_csv(out_path, index=False)
-
+        save_dataframe(self.to_dataframe(), out_path)
         return out_path
 
 
@@ -75,43 +69,87 @@ class ACCRecorder:
             self._rows.append(asdict(sample))
 
     def to_dataframe(self) -> pd.DataFrame:
-        df = pd.DataFrame(self._rows)
-
-        if df.empty:
-            return pd.DataFrame(
-                columns=[
-                    "packet_id",
-                    "device_time_ms",
-                    "host_time_ms",
-                    "x",
-                    "y",
-                    "z",
-                    "sample_idx",
-                    "sample_time_ms",
-                    "time_ms",
-                ]
-            )
-
-        df["sample_idx"] = df.groupby("packet_id").cumcount()
-        packet_sizes = df.groupby("packet_id")["packet_id"].transform("size")
-
-        df["sample_time_ms"] = (
-            df["device_time_ms"]
-            - ((packet_sizes - 1 - df["sample_idx"]) * self._acc_dt_ms)
-        )
-
-        df["time_ms"] = df["sample_time_ms"] - df["sample_time_ms"].min()
-
-        return df
+        return build_acc_dataframe(self._rows, self._acc_dt_ms)
 
     def save(self, data_dir: Path, subject_name: str, suffix: str) -> Path:
-        data_dir.mkdir(parents=True, exist_ok=True)
         out_path = data_dir / f"{subject_name}_acc_{suffix}.csv"
-
-        df = self.to_dataframe()
-        df.to_csv(out_path, index=False)
-
+        save_dataframe(self.to_dataframe(), out_path)
         return out_path
+
+
+def build_ecg_dataframe(rows: list[dict], ecg_dt_ms: float) -> pd.DataFrame:
+    if not rows:
+        return pd.DataFrame(columns=ECG_COLUMNS)
+
+    df = pd.DataFrame(rows)
+    return add_sample_timestamps(df, ecg_dt_ms)
+
+
+def build_acc_dataframe(rows: list[dict], acc_dt_ms: float) -> pd.DataFrame:
+    if not rows:
+        return pd.DataFrame(columns=ACC_COLUMNS)
+
+    df = pd.DataFrame(rows)
+    return add_sample_timestamps(df, acc_dt_ms)
+
+
+def add_sample_timestamps(df: pd.DataFrame, dt_ms: float) -> pd.DataFrame:
+    df = df.copy()
+
+    df["sample_idx"] = df.groupby("packet_id").cumcount()
+    packet_sizes = df.groupby("packet_id")["packet_id"].transform("size")
+
+    df["sample_time_ms"] = (
+        df["device_time_ms"]
+        - ((packet_sizes - 1 - df["sample_idx"]) * dt_ms)
+    )
+
+    df["time_ms"] = df["sample_time_ms"] - df["sample_time_ms"].min()
+
+    return df
+
+
+def build_recording_dataframe(
+    ecg_df: pd.DataFrame,
+    acc_df: pd.DataFrame,
+    ecg_freq_hz: int,
+) -> pd.DataFrame:
+    if ecg_df.empty:
+        return pd.DataFrame(columns=["time_ms", "ecg", "r_peak", "acc_mag"])
+
+    _, info = nk.ecg_peaks(
+        ecg_df["ecg"],
+        sampling_rate=ecg_freq_hz,
+    )
+
+    ecg_for_recording = ecg_df[["time_ms", "ecg"]].copy()
+    ecg_for_recording["r_peak"] = 0
+    ecg_for_recording.loc[info["ECG_R_Peaks"], "r_peak"] = 1
+
+    if acc_df.empty:
+        ecg_for_recording["acc_mag"] = np.nan
+        return ecg_for_recording[["time_ms", "ecg", "r_peak", "acc_mag"]]
+
+    acc_for_recording = acc_df[["time_ms", "x", "y", "z"]].copy()
+    acc_for_recording["acc_mag"] = np.sqrt(
+        acc_for_recording["x"] ** 2
+        + acc_for_recording["y"] ** 2
+        + acc_for_recording["z"] ** 2
+    )
+
+    recording = pd.merge_asof(
+        ecg_for_recording.sort_values("time_ms"),
+        acc_for_recording[["time_ms", "acc_mag"]].sort_values("time_ms"),
+        on="time_ms",
+        direction="nearest",
+    )
+
+    return recording[["time_ms", "ecg", "r_peak", "acc_mag"]]
+
+
+def save_dataframe(df: pd.DataFrame, out_path: Path) -> None:
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    df.to_csv(out_path, index=False)
 
 
 def save_recording(
@@ -123,51 +161,21 @@ def save_recording(
 ) -> tuple[Path, Path, Path]:
     data_dir.mkdir(parents=True, exist_ok=True)
 
-    ecg_df = ecg_recorder.to_dataframe()
-    acc_df = acc_recorder.to_dataframe()
-
     ecg_path = data_dir / f"{subject_name}_ecg_{suffix}.csv"
     acc_path = data_dir / f"{subject_name}_acc_{suffix}.csv"
     recording_path = data_dir / f"{subject_name}_recording_{suffix}.csv"
 
-    ecg_df.to_csv(ecg_path, index=False)
-    acc_df.to_csv(acc_path, index=False)
-
-    if ecg_df.empty:
-        recording = pd.DataFrame(columns=["time_ms", "ecg", "r_peak", "acc_mag"])
-        recording.to_csv(recording_path, index=False)
-        return ecg_path, acc_path, recording_path
-
-    _, info = nk.ecg_peaks(
-        ecg_df["ecg"],
-        sampling_rate=ecg_recorder._ecg_freq_hz,
+    ecg_df = ecg_recorder.to_dataframe()
+    acc_df = acc_recorder.to_dataframe()
+    recording_df = build_recording_dataframe(
+        ecg_df,
+        acc_df,
+        ecg_recorder.ecg_freq_hz,
     )
 
-    ecg_for_recording = ecg_df[["time_ms", "ecg"]].copy()
-    ecg_for_recording["r_peak"] = 0
-    ecg_for_recording.loc[info["ECG_R_Peaks"], "r_peak"] = 1
-
-    if acc_df.empty:
-        ecg_for_recording["acc_mag"] = np.nan
-        recording = ecg_for_recording[["time_ms", "ecg", "r_peak", "acc_mag"]]
-    else:
-        acc_for_recording = acc_df[["time_ms", "x", "y", "z"]].copy()
-        acc_for_recording["acc_mag"] = np.sqrt(
-            acc_for_recording["x"] ** 2
-            + acc_for_recording["y"] ** 2
-            + acc_for_recording["z"] ** 2
-        )
-
-        recording = pd.merge_asof(
-            ecg_for_recording.sort_values("time_ms"),
-            acc_for_recording[["time_ms", "acc_mag"]].sort_values("time_ms"),
-            on="time_ms",
-            direction="nearest",
-        )
-
-        recording = recording[["time_ms", "ecg", "r_peak", "acc_mag"]]
-
-    recording.to_csv(recording_path, index=False)
+    save_dataframe(ecg_df, ecg_path)
+    save_dataframe(acc_df, acc_path)
+    save_dataframe(recording_df, recording_path)
 
     return ecg_path, acc_path, recording_path
 
